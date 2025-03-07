@@ -1,27 +1,9 @@
-// import { ThemeStyles } from 'app/lib/theme';
-
-// interface TerminalProps {
-//   theme: ThemeStyles;
-//   setTheme: (theme: 'dark' | 'light') => void;
-//   toggleTheme: () => void;
-// }
-
-// export default function Terminal({ theme, setTheme, toggleTheme }: TerminalProps) {
-//   return (
-//     <div style={theme.terminal}>
-//       <button onClick={toggleTheme}>Toggle Theme</button>
-//       {/* Logic của Terminal */}
-//     </div>
-//   );
-// }
-
-
 // components/Terminal.tsx
 'use client'; // Nếu dùng Next.js App Router
 
 import { useState } from 'react';
-import { ThemeStyles } from 'app/lib/theme'; // Import type từ themes.ts
-import Field from './Field'; // Giả sử Field là component khác
+import { ThemeStyles } from 'app/lib/theme'; 
+import Field from './field';
 
 interface TerminalProps {
   theme: ThemeStyles;
@@ -31,7 +13,7 @@ interface TerminalProps {
 export default function Terminal({ theme, setTheme }: TerminalProps) {
     //   return (
   const [maximized, setMaximized] = useState<boolean>(false);
-  const [title, setTitle] = useState<string>('React Terminal');
+  const [title, setTitle] = useState<string>('Portfolio Terminal');
 
   const handleClose = () => {
     window.location.href = '';
