@@ -2,14 +2,16 @@
 import { createContext, useEffect, useState } from "react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
 import { useTheme } from "app/components/hooks/useTheme";
-import GlobalStyle from "app/components/styles/GlobalStyle";
+// import GlobalStyle from "app/components/styles/GlobalStyle";
 import Terminal from "app/components/terminal1";
 
-export const themeContext = createContext<
-  ((switchTheme: DefaultTheme) => void) | null
->(null);
+import { themeContext } from "app/context/themeContext";
 
-function App() {
+// export const themeContext = createContext<
+//   ((switchTheme: DefaultTheme) => void) | null
+// >(null);
+
+function Page() {
   // themes
   const { theme, themeLoaded, setMode } = useTheme();
   const [selectedTheme, setSelectedTheme] = useState(theme);
@@ -51,7 +53,21 @@ function App() {
   };
 
   return (
-    <>
+    // <>
+    //   <h1 className="sr-only" aria-label="Terminal Portfolio">
+    //     Terminal Portfolio
+    //   </h1>
+    //   {themeLoaded && (
+    //     <ThemeProvider theme={selectedTheme}>
+    //       {/* <GlobalStyle /> */}
+    //       <themeContext.Provider value={themeSwitcher}>
+    //         <Terminal />
+    //       </themeContext.Provider>
+    //     </ThemeProvider>
+    //   )}
+    // </>
+
+     <>
       <h1 className="sr-only" aria-label="Terminal Portfolio">
         Terminal Portfolio
       </h1>
@@ -64,7 +80,8 @@ function App() {
         </ThemeProvider>
       )}
     </>
+
   );
 }
 
-export default App;
+export default Page;

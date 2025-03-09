@@ -1,6 +1,6 @@
 import { useContext, useEffect } from "react";
 import _ from "lodash";
-import { themeContext } from "app/view2/page";
+import { themeContext } from "app/context/themeContext";
 import { Wrapper } from "../styles/Output.styled";
 import { ThemeSpan, ThemesWrapper } from "../styles/Themes.styled";
 import {
