@@ -1,6 +1,5 @@
-import React, { Component } from "react";
-// import { evaluate } from 'mathjs';
-import * as math from 'mathjs';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import * as math from "mathjs";
 
 type Command = {
   command: string;
@@ -9,12 +8,11 @@ type Command = {
   isMain?: boolean;
 };
 
-type FieldState = {
-  commandHistory: string[];
-  commandHistoryIndex: number;
-  fieldHistory: { text?: string | string[]; hasBuffer?: boolean; isCommand?: boolean; isError?: boolean }[];
-  userInput: string;
-  isMobile: boolean;
+type FieldHistoryEntry = {
+  text?: string | string[];
+  hasBuffer?: boolean;
+  isCommand?: boolean;
+  isError?: boolean;
 };
 
 type FieldProps = {
@@ -29,402 +27,632 @@ type FieldProps = {
   };
 };
 
-class Field extends Component<FieldProps, FieldState> {
-  private recognizedCommands: Command[];
+const Field: React.FC<FieldProps> = (theme) => {
+  const fieldRef = useRef<HTMLDivElement | null>(null);
 
-  constructor(props: FieldProps) {
-    super(props);
-    this.state = {
-      commandHistory: [],
-      commandHistoryIndex: 0,
-      fieldHistory: [
-        { text: "Portfolio Terminal" },
-        { text: "Nhập HELP để xem danh sách lệnh đầy đủ.", hasBuffer: true },
+  // State management using hooks
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [commandHistoryIndex, setCommandHistoryIndex] = useState(0);
+  const [fieldHistory, setFieldHistory] = useState<FieldHistoryEntry[]>([
+    { text: "Portfolio Terminal" },
+    { text: "Nhập HELP để xem danh sách lệnh đầy đủ.", hasBuffer: true },
+  ]);
+
+  const [userInput, setUserInput] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Recognized commands list
+  const recognizedCommands: Command[] = [
+    {
+      command: "help",
+      purpose: "Cung cấp thông tin trợ giúp cho các lệnh Terminal.",
+    },
+    { command: "date", purpose: "Hiển thị ngày hiện tại." },
+    {
+      command: "start",
+      purpose:
+        "Khởi chạy một URL được chỉ định trong một tab mới hoặc cửa sổ riêng biệt.",
+      help: [
+        "START <URL>",
+        "Khởi chạy một URL được chỉ định trong một tab mới hoặc cửa sổ riêng biệt.",
+        "",
+        "URL......................Trang web bạn muốn mở.",
       ],
-      userInput: "",
-      isMobile: false,
-    };
-
-    this.recognizedCommands = [
-      { command: "help", purpose: "Cung cấp thông tin trợ giúp cho các lệnh Terminal." },
-      { command: "date", purpose: "Hiển thị ngày hiện tại." },
-      {
-        command: "start",
-        purpose: "Khởi chạy một URL được chỉ định trong một tab mới hoặc cửa sổ riêng biệt.",
+    },
+    { command: "cls", purpose: "Làm sạch màn hình." },
+    {
+      command: "cmd",
+      purpose: "Bắt đầu một phiên bản mới của Portfolio Terminal.",
+    },
+    {
+      command: "theme",
+      purpose: "Thiết lập bảng màu của Portfolio Terminal.",
+      help: [
+        "THEME <L|LIGHT|D|DARK> [-s, -save]",
+        "Sets the color scheme of the React Terminal.",
+        "",
+        "L, LIGHT.................Sets the color scheme to light mode.",
+        "D, DARK..................Sets the color scheme to dark mode.",
+        "",
+        "-s, -save................Saves the setting to localStorage.",
+      ],
+    },
+    {
+      command: "exit",
+      purpose:
+        "Thoát khỏi Portfolio Terminal và quay lại trang giới thiệu của dcviet",
+    },
+    { command: "time", purpose: "Hiển thị thời gian hiện tại." },
+    {
+      command: "about",
+      isMain: true,
+      purpose: "Hiển thị thông tin cơ bản về dcviet.",
+    },
+    {
+      command: "experience",
+      isMain: true,
+      purpose: "Hiển thị thông tin về trải nghiệm của dcviet.",
+    },
+    {
+      command: "skills",
+      isMain: true,
+      purpose:
+        "Hiển thị thông tin về kỹ năng của dcviet với tư cách là một nhà phát triển.",
+    },
+    {
+      command: "contact",
+      isMain: true,
+      purpose: "Hiển thị thông tin liên lạc của dcviet.",
+    },
+    {
+      command: "projects",
+      isMain: true,
+      purpose:
+        "Hiển thị thông tin về các dự án dcviet đã thực hiện trong quá khứ.",
+    },
+    {
+      command: "project",
+      isMain: true,
+      purpose:
+        "Khởi chạy một dự án được chỉ định trong một tab mới hoặc cửa sổ riêng.",
+      help: [
+        "PROJECT <TITLE>",
+        "Khởi chạy một dự án được chỉ định trong một tab mới hoặc cửa sổ riêng.",
+        "Danh sách các dự án hiện tại bao gồm:",
+        "Minesweeper",
+        "PuniUrl",
+        "Taggen",
+        "Forum",
+        "Simon",
+        "",
+        "TITLE....................Tiêu đề của dự án bạn muốn xem.",
+      ],
+    },
+    {
+      command: "title",
+      purpose: "Đặt tiêu đề cửa sổ cho Portfolio Terminal.",
+      help: [
+        "TITLE <INPUT>",
+        "Đặt tiêu đề cửa sổ cho Portfolio Terminal.",
+        "",
+        "INPUT....................Tiêu đề bạn muốn sử dụng cho cửa sổ Portfolio Terminal.",
+      ],
+    },
+    ...["google", "duckduckgo", "bing"].map((cmd) => {
+      const properCase =
+        cmd === "google"
+          ? "Google"
+          : cmd === "duckduckgo"
+          ? "DuckDuckGo"
+          : "Bing";
+      return {
+        command: cmd,
+        purpose: `Tìm kiếm một truy vấn nhất định bằng ${properCase}.`,
         help: [
-          "START <URL>",
-          "Khởi chạy một URL được chỉ định trong một tab mới hoặc cửa sổ riêng biệt.",
+          `${cmd.toUpperCase()} <QUERY>`,
+          `Tìm kiếm một truy vấn nhất định bằng ${properCase}. Nếu không có truy vấn nào được cung cấp, chỉ cần khởi chạy ${properCase}.`,
           "",
-          "URL......................Trang web bạn muốn mở.",
+          `QUERY....................Tương tự như khi bạn nhập vào thanh tìm kiếm của ${properCase}.`,
         ],
-      },
-      { command: "cls", purpose: "Làm sạch màn hình." },
-      { command: "cmd", purpose: "Bắt đầu một phiên bản mới của Portfolio Terminal." },
-      {
-        command: "theme",
-        purpose: "Thiết lập bảng màu của Portfolio Terminal.",
-        help: [
-          "THEME <L|LIGHT|D|DARK> [-s, -save]",
-          "Sets the color scheme of the React Terminal.",
-          "",
-          "L, LIGHT.................Sets the color scheme to light mode.",
-          "D, DARK..................Sets the color scheme to dark mode.",
-          "",
-          "-s, -save................Saves the setting to localStorage.",
-        ],
-      },
-      { command: "exit", purpose: "Thoát khỏi Portfolio Terminal và quay lại trang giới thiệu của dcviet" },
-      { command: "time", purpose: "Hiển thị thời gian hiện tại." },
-      { command: "about", isMain: true, purpose: "Hiển thị thông tin cơ bản về dcviet." },
-      { command: "experience", isMain: true, purpose: "Hiển thị thông tin về trải nghiệm của dcviet." },
-      { command: "skills", isMain: true, purpose: "Hiển thị thông tin về kỹ năng của dcviet với tư cách là một nhà phát triển." },
-      { command: "contact", isMain: true, purpose: "Hiển thị thông tin liên lạc của dcviet." },
-      { command: "projects", isMain: true, purpose: "Hiển thị thông tin về các dự án dcviet đã thực hiện trong quá khứ." },
-      {
-        command: "project",
-        isMain: true,
-        purpose: "Khởi chạy một dự án được chỉ định trong một tab mới hoặc cửa sổ riêng.",
-        help: [
-          "PROJECT <TITLE>",
-          "Khởi chạy một dự án được chỉ định trong một tab mới hoặc cửa sổ riêng.",
-          "Danh sách các dự án hiện tại bao gồm:",
-          "Minesweeper",
-          "PuniUrl",
-          "Taggen",
-          "Forum",
-          "Simon",
-          "",
-          "TITLE....................Tiêu đề của dự án bạn muốn xem.",
-        ],
-      },
-      {
-        command: "title",
-        purpose: "Đặt tiêu đề cửa sổ cho Portfolio Terminal.",
-        help: [
-          "TITLE <INPUT>",
-          "Đặt tiêu đề cửa sổ cho Portfolio Terminal.",
-          "",
-          "INPUT....................Tiêu đề bạn muốn sử dụng cho cửa sổ Portfolio Terminal.",
-        ],
-      },
-      ...["google", "duckduckgo", "bing"].map((cmd) => {
-        const properCase = cmd === "google" ? "Google" : cmd === "duckduckgo" ? "DuckDuckGo" : "Bing";
-        return {
-          command: cmd,
-          purpose: `Searches a given query using ${properCase}.`,
-          help: [
-            `${cmd.toUpperCase()} <QUERY>`,
-            `Tìm kiếm một truy vấn nhất định bằng ${properCase}. Nếu không có truy vấn nào được cung cấp, chỉ cần khởi chạy ${properCase}.`,
-            "",
-            `QUERY....................It's the same as if you were to type inside the ${properCase} search bar.`,
-          ],
-        };
-      }),
-    ];
+      };
+    }),
+  ];
 
-    this.handleTyping = this.handleTyping.bind(this);
-    this.handleInputEvaluation = this.handleInputEvaluation.bind(this);
-    this.handleInputExecution = this.handleInputExecution.bind(this);
-    this.handleContextMenuPaste = this.handleContextMenuPaste.bind(this);
-  }
-  componentDidMount() {
-    if (typeof window.orientation !== "undefined" || navigator.userAgent.indexOf('IEMobile') !== -1) {
-      this.setState((state) => ({
-        isMobile: true,
-        fieldHistory: [
-          ...state.fieldHistory,
-          { isCommand: true },
-          {
-            text: `Thật không may vì ứng dụng này là môi trường 'không cần nhập liệu' nên thiết bị di động không được hỗ trợ. Tôi đang tìm cách khắc phục điều này, vì vậy hãy kiên nhẫn với tôi! Trong thời gian chờ đợi, hãy quay lại nếu bạn đang sử dụng máy tính để bàn.`,
-            isError: true,
-            hasBuffer: true,
-          },
-        ],
-      }));
-    } else {
-      const userElem = document.querySelector('#field') as HTMLElement;
-      const themePref = window.localStorage.getItem('reactTerminalThemePref');
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", checkMobile);
+    checkMobile(); // Kiểm tra lần đầu khi component mount
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
-      userElem.focus();
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => handleTyping(e);
+  //   window.addEventListener("keydown", handleKeyDown);
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, [userInput, commandHistory, commandHistoryIndex]);
 
-      document.querySelector('#useless-btn')?.addEventListener('click', () =>
-        this.setState((state) => ({
-          fieldHistory: [
-            ...state.fieldHistory,
-            { isCommand: true },
-            { text: 'SYS >> That button doesn\'t do anything.', hasBuffer: true },
-          ],
-        }))
-      );
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => handleTyping(e);
 
-      if (themePref) {
-        this.props.setTheme(themePref);
-      }
-    }
-  }
+  //   window.addEventListener("keydown", handleKeyDown);
 
-  componentDidUpdate() {
-    const userElem = document.querySelector('#field') as HTMLElement;
-    userElem.scrollTop = userElem.scrollHeight;
-  }
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, []);
 
-  handleTyping(e: KeyboardEvent) {
-    e.preventDefault();
-
-    const { key, ctrlKey, altKey } = e;
-    const forbidden = [
-      ...Array.from({ length: 12 }, (_, y) => `F${y + 1}`),
-      "ContextMenu", "Meta", "NumLock", "Shift", "Control", "Alt",
-      "CapsLock", "Tab", "ScrollLock", "Pause", "Insert", "Home",
-      "PageUp", "Delete", "End", "PageDown",
-    ];
-
-    if (!forbidden.includes(key) && !ctrlKey && !altKey) {
-      if (key === "Backspace") {
-        this.setState((state) => ({ userInput: state.userInput.slice(0, -1) }));
-      } else if (key === "Escape") {
-        this.setState({ userInput: "" });
-      } else if (key === "ArrowUp" || key === "ArrowLeft") {
-        const { commandHistory, commandHistoryIndex } = this.state;
-        if (commandHistoryIndex < commandHistory.length) {
-          this.setState((state) => ({
-            commandHistoryIndex: state.commandHistoryIndex + 1,
-            userInput: state.commandHistory[state.commandHistoryIndex] || "",
-          }));
-        }
-      } else if (key === "ArrowDown" || key === "ArrowRight") {
-        if (this.state.commandHistoryIndex > 0) {
-          this.setState((state) => ({
-            commandHistoryIndex: state.commandHistoryIndex - 1,
-            userInput: state.commandHistory[state.commandHistoryIndex - 1] || "",
-          }));
-        }
-      } else if (key === "Enter") {
-        const { userInput } = this.state;
-
-        if (userInput.length) {
-          this.setState(
-            (state) => ({
-              commandHistory: [userInput, ...state.commandHistory],
-              commandHistoryIndex: 0,
-              fieldHistory: [...state.fieldHistory, { text: userInput, isCommand: true }],
-              userInput: "",
-            }),
-            () => this.handleInputEvaluation(userInput)
-          );
-        } else {
-          this.setState((state) => ({
-            fieldHistory: [...state.fieldHistory, { isCommand: true }],
-          }));
-        }
-      } else {
-        this.setState((state) => ({ userInput: state.userInput + key }));
-      }
-    }
-  }
-
-  handleInputEvaluation(input: string) {
+  // Xử lý đánh giá lệnh đầu vào
+  const handleInputEvaluation = (input: string) => {
     try {
+      // Kiểm tra nếu là biểu thức toán học
       const evaluatedForArithmetic = math.evaluate(input);
-
       if (!isNaN(evaluatedForArithmetic)) {
-        return this.setState((state) => ({
-          fieldHistory: [...state.fieldHistory, { text: evaluatedForArithmetic.toString() }],
-        }));
+        setFieldHistory((prev) => [
+          ...prev,
+          { text: evaluatedForArithmetic.toString() },
+        ]);
+        return;
       }
-
-      throw new Error();
     } catch (err) {
-      const { recognizedCommands, giveError, handleInputExecution } = this;
-      const cleanedInput = input.toLowerCase().trim();
-      const dividedInput = cleanedInput.split(" ");
-      const parsedCmd = dividedInput[0];
-      const parsedParams = dividedInput.slice(1).filter((s) => s[0] !== "-");
-      const parsedFlags = dividedInput.slice(1).filter((s) => s[0] === "-");
-      const isError = !recognizedCommands.some((s) => s.command === parsedCmd);
-
-      if (isError) {
-        return this.setState((state) => ({
-          fieldHistory: [...state.fieldHistory, giveError("nr", input)],
-        }));
-      }
-
-      return handleInputExecution(parsedCmd, parsedParams, parsedFlags);
+      // Bỏ qua lỗi toán học, tiếp tục kiểm tra lệnh
     }
-  }
 
-  handleInputExecution(cmd: string, params: string[] = [], flags: string[] = []) {
-    if (cmd === "help") {
-      if (params.length) {
-        if (params.length > 1) {
-          return this.setState((state) => ({
-            fieldHistory: [
-              ...state.fieldHistory,
-              this.giveError("bp", { cmd: "HELP", noAccepted: 1 }),
-            ],
-          }));
-        }
+    // Xử lý lệnh không phải toán học
+    const cleanedInput = input.toLowerCase().trim();
+    const dividedInput = cleanedInput.split(" ");
+    const parsedCmd = dividedInput[0];
+    const parsedParams = dividedInput
+      .slice(1)
+      .filter((s) => !s.startsWith("-"));
+    const parsedFlags = dividedInput.slice(1).filter((s) => s.startsWith("-"));
 
-        const cmdsWithHelp = this.recognizedCommands.filter((s) => s.help);
-        const matchedCommand = cmdsWithHelp.find((s) => s.command === params[0]);
-        const matchedAnyCommand = this.recognizedCommands.find((s) => s.command === params[0]);
+    // Kiểm tra nếu lệnh không hợp lệ
+    const matchedCommand = recognizedCommands.find(
+      (s) => s.command === parsedCmd
+    );
+    if (!matchedCommand) {
+      setFieldHistory((prev) => [...prev, giveError("nr", input)]);
+      return;
+    }
 
-        if (matchedCommand) {
-          return this.setState((state) => ({
-            fieldHistory: [
-              ...state.fieldHistory,
-              { text: matchedCommand.help, hasBuffer: true },
-            ],
-          }));
-        } else if (matchedAnyCommand) {
-          return this.setState((state) => ({
-            fieldHistory: [
-              ...state.fieldHistory,
-              {
-                text: [
-                  `No additional help needed for ${matchedAnyCommand.command.toUpperCase()}`,
-                  matchedAnyCommand.purpose,
-                ],
-                hasBuffer: true,
-              },
-            ],
-          }));
-        }
+    handleInputExecution(parsedCmd, parsedParams, parsedFlags);
+  };
 
-        return this.setState((state) => ({
-          fieldHistory: [
-            ...state.fieldHistory,
-            this.giveError("up", params[0].toUpperCase()),
-          ],
-        }));
+  // Xử lý nhập bàn phím
+  // const handleTyping = useCallback(
+  //   (e: React.KeyboardEvent<HTMLInputElement>) => {
+  //     const { key, ctrlKey, altKey } = e;
+
+  //     const forbiddenKeys = new Set([
+  //       ...Array.from({ length: 12 }, (_, y) => `F${y + 1}`),
+  //       "ContextMenu",
+  //       "Meta",
+  //       "NumLock",
+  //       "Shift",
+  //       "Control",
+  //       "Alt",
+  //       "CapsLock",
+  //       "Tab",
+  //       "ScrollLock",
+  //       "Pause",
+  //       "Insert",
+  //       "Home",
+  //       "PageUp",
+  //       "Delete",
+  //       "End",
+  //       "PageDown",
+  //     ]);
+
+  //     if (forbiddenKeys.has(key) || ctrlKey || altKey) return;
+
+  //     // Xử lý các phím đặc biệt
+  //     if (key === "Enter") {
+  //       e.preventDefault();
+  //       if (userInput.trim()) {
+  //         setCommandHistory((prev) => [userInput, ...prev]);
+  //         setCommandHistoryIndex(0);
+  //         setFieldHistory((prev) => [
+  //           ...prev,
+  //           { text: userInput, isCommand: true },
+  //         ]);
+  //         setUserInput("");
+  //         handleInputEvaluation(userInput);
+  //       } else {
+  //         setFieldHistory((prev) => [...prev, { isCommand: true }]);
+  //       }
+  //     } else if (key === "Backspace") {
+  //       e.preventDefault();
+  //       setUserInput((prev) => prev.slice(0, -1));
+  //     } else if (key.length === 1) {
+  //       setUserInput((prev) => prev + key);
+  //     }
+  //   },
+  //   [
+  //     userInput,
+  //     commandHistory,
+  //     setUserInput,
+  //     setCommandHistory,
+  //     setCommandHistoryIndex,
+  //     setFieldHistory,
+  //     handleInputEvaluation,
+  //   ]
+  // );
+
+  // const handleTyping = useCallback(
+  //   (e: KeyboardEvent | React.KeyboardEvent<HTMLInputElement>) => {
+  //     const key = "key" in e ? e.key : ""; // Xử lý cho cả 2 loại sự kiện
+  //     const ctrlKey = "ctrlKey" in e ? e.ctrlKey : false;
+  //     const altKey = "altKey" in e ? e.altKey : false;
+
+  //     const forbiddenKeys = new Set([
+  //       ...Array.from({ length: 12 }, (_, y) => `F${y + 1}`),
+  //       "ContextMenu",
+  //       "Meta",
+  //       "NumLock",
+  //       "Shift",
+  //       "Control",
+  //       "Alt",
+  //       "CapsLock",
+  //       "Tab",
+  //       "ScrollLock",
+  //       "Pause",
+  //       "Insert",
+  //       "Home",
+  //       "PageUp",
+  //       "Delete",
+  //       "End",
+  //       "PageDown",
+  //     ]);
+
+  //     if (forbiddenKeys.has(key) || ctrlKey || altKey) return;
+
+  //     e.preventDefault(); // Chặn hành vi mặc định để tránh double chữ
+
+  //     setUserInput((prev) => {
+  //       if (key === "Backspace") return prev.slice(0, -1);
+  //       if (key === "Escape") return "";
+  //       if (key.length === 1) return prev + key;
+  //       return prev;
+  //     });
+
+  //     if (key === "Enter") {
+  //       if (userInput.trim()) {
+  //         setCommandHistory((prev) => [userInput, ...prev]);
+  //         setCommandHistoryIndex(0);
+  //         setFieldHistory((prev) => [
+  //           ...prev,
+  //           { text: userInput, isCommand: true },
+  //         ]);
+  //         setUserInput("");
+  //         handleInputEvaluation(userInput);
+  //       } else {
+  //         setFieldHistory((prev) => [...prev, { isCommand: true }]);
+  //       }
+  //     }
+  //   },
+  //   [
+  //     setUserInput,
+  //     setCommandHistory,
+  //     setCommandHistoryIndex,
+  //     setFieldHistory,
+  //     handleInputEvaluation,
+  //   ]
+  // );
+
+  const handleTyping = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const { key, ctrlKey, altKey } = e;
+  
+    const forbiddenKeys = new Set([
+      ...Array.from({ length: 12 }, (_, y) => `F${y + 1}`),
+      "ContextMenu",
+      "Meta",
+      "NumLock",
+      "Shift",
+      "Control",
+      "Alt",
+      "CapsLock",
+      "Tab",
+      "ScrollLock",
+      "Pause",
+      "Insert",
+      "Home",
+      "PageUp",
+      "Delete",
+      "End",
+      "PageDown",
+    ]);
+  
+    if (forbiddenKeys.has(key) || ctrlKey || altKey) return;
+  
+    if (key === "Backspace") {
+      setUserInput((prev) => prev.slice(0, -1));
+    } else if (key === "Escape") {
+      setUserInput("");
+    } else if (key === "ArrowUp" || key === "ArrowLeft") {
+      setCommandHistoryIndex((prevIndex) => {
+        const newIndex = Math.min(prevIndex + 1, commandHistory.length - 1);
+        setUserInput(commandHistory[newIndex] || "");
+        return newIndex;
+      });
+    } else if (key === "ArrowDown" || key === "ArrowRight") {
+      setCommandHistoryIndex((prevIndex) => {
+        const newIndex = Math.max(prevIndex - 1, 0);
+        setUserInput(commandHistory[newIndex] || "");
+        return newIndex;
+      });
+    } else if (key === "Enter") {
+      if (userInput.trim()) {
+        setCommandHistory((prev) => [userInput, ...prev]);
+        setCommandHistoryIndex(0);
+        setFieldHistory((prev) => [...prev, { text: userInput, isCommand: true }]);
+        setUserInput("");
+        handleInputEvaluation(userInput);
+      } else {
+        setFieldHistory((prev) => [...prev, { isCommand: true }]);
       }
+    } else {
+      setUserInput((prev) => prev + key);
+    }
+  };
+  
 
-      return this.setState((state) => ({
-        fieldHistory: [
-          ...state.fieldHistory,
+  // Xử lý thực thi lệnh đầu vào
+  const handleInputExecution = (
+    cmd: string,
+    params: string[] = [],
+    flags: string[] = []
+  ) => {
+    switch (cmd) {
+      case "help":
+        if (params.length > 1) {
+          setFieldHistory((prev) => [
+            ...prev,
+            giveError("bp", { cmd: "HELP", noAccepted: 1 }),
+          ]);
+          return;
+        }
+
+        if (params.length === 1) {
+          const matchedCommand = recognizedCommands.find(
+            (s) => s.command === params[0]
+          );
+          if (matchedCommand?.help) {
+            setFieldHistory((prev) => [
+              ...prev,
+              { text: matchedCommand.help, hasBuffer: true },
+            ]);
+          } else {
+            setFieldHistory((prev) => [
+              ...prev,
+              giveError("up", params[0].toUpperCase()),
+            ]);
+          }
+          return;
+        }
+
+        setFieldHistory((prev) => [
+          ...prev,
           {
             text: [
               "Main commands:",
-              ...this.recognizedCommands
+              ...recognizedCommands
                 .filter(({ isMain }) => isMain)
-                .map(({ command, purpose }) => `${command.toUpperCase()}${".".repeat(15 - command.length)}${purpose}`),
+                .map(
+                  ({ command, purpose }) =>
+                    `${command.toUpperCase()}${".".repeat(
+                      15 - command.length
+                    )}${purpose}`
+                ),
               "",
               "All commands:",
-              ...this.recognizedCommands
-                .map(({ command, purpose }) => `${command.toUpperCase()}${".".repeat(15 - command.length)}${purpose}`),
+              ...recognizedCommands.map(
+                ({ command, purpose }) =>
+                  `${command.toUpperCase()}${".".repeat(
+                    15 - command.length
+                  )}${purpose}`
+              ),
               "",
               "For help about a specific command, type HELP <CMD>, e.g. HELP PROJECT.",
             ],
             hasBuffer: true,
           },
-        ],
-      }));
-    }
+        ]);
+        return;
 
-    if (cmd === "cls") {
-      return this.setState({ fieldHistory: [] });
-    }
+      case "cls":
+        setFieldHistory([]);
+        return;
 
-    if (cmd === "start" && params.length === 1) {
-      return this.setState(
-        (state) => ({
-          fieldHistory: [
-            ...state.fieldHistory,
-            { text: `Launching ${params[0]}...`, hasBuffer: true },
-          ],
-        }),
-        () => window.open(/^http/i.test(params[0]) ? params[0] : `https://${params[0]}`)
-      );
-    }
+      case "start":
+        if (params.length === 1) {
+          const url = params[0];
+          const validUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+          setFieldHistory((prev) => [
+            ...prev,
+            { text: `Launching ${url}...`, hasBuffer: true },
+          ]);
+          window.open(validUrl, "_blank");
+        } else {
+          setFieldHistory((prev) => [
+            ...prev,
+            giveError("bp", { cmd: "START", noAccepted: 1 }),
+          ]);
+        }
+        return;
 
-    if (cmd === "date") {
-      return this.setState((state) => ({
-        fieldHistory: [
-          ...state.fieldHistory,
-          { text: `The current date is: ${new Date().toLocaleDateString()}`, hasBuffer: true },
-        ],
-      }));
-    }
+      case "date":
+        setFieldHistory((prev) => [
+          ...prev,
+          {
+            text: `The current date is: ${new Date().toLocaleDateString()}`,
+            hasBuffer: true,
+          },
+        ]);
+        return;
 
-    if (cmd === "exit") {
-      window.location.href = "https://behance.net/dcviet";
-    }
-  }
+      case "exit":
+        window.location.href = "https://behance.net/dcviet";
+        return;
 
-  handleContextMenuPaste(e: React.MouseEvent) {
+      default:
+        setFieldHistory((prev) => [...prev, giveError("nr", cmd)]);
+    }
+  };
+
+  // Xử lý dán nội dung từ clipboard
+  const handleContextMenuPaste = async (e: React.MouseEvent) => {
     e.preventDefault();
 
-    if ("clipboard" in navigator) {
-      navigator.clipboard.readText().then((clipboard) =>
-        this.setState((state) => ({
-          userInput: `${state.userInput}${clipboard}`,
-        }))
-      );
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("Clipboard access is not supported.");
+      }
+
+      const clipboardText = await navigator.clipboard.readText();
+      if (clipboardText) {
+        setUserInput((prev) => prev + clipboardText);
+      }
+    } catch (error) {
+      console.error("Failed to paste from clipboard:", error);
     }
-  }
+  };
 
-  giveError(type: string, extra?: any) {
-    const err = { text: "", isError: true, hasBuffer: true };
+  // Hàm tạo lỗi
+  const giveError = (type: string, extra?: any) => {
+    const errorMessages: Record<string, string> = {
+      nr: `${extra} : The term or expression '${extra}' is not recognized. Check the spelling and try again. If you don't know what commands are recognized, type HELP.`,
+      nf: `The ${extra} command requires the use of flags. If you don't know what flags can be used, type HELP ${extra}.`,
+      bf: `The flags you provided for ${extra} are not valid. If you don't know what flags can be used, type HELP ${extra}.`,
+      bp: `The ${extra?.cmd} command requires ${extra?.noAccepted} parameter(s). If you don't know what parameter(s) to use, type HELP ${extra?.cmd}.`,
+      up: `The command ${extra} is not supported by the HELP utility.`,
+    };
 
-    if (type === "nr") {
-      err.text = `${extra} : The term or expression '${extra}' is not recognized. Check the spelling and try again. If you don't know what commands are recognized, type HELP.`;
-    } else if (type === "nf") {
-      err.text = `The ${extra} command requires the use of flags. If you don't know what flags can be used, type HELP ${extra}.`;
-    } else if (type === "bf") {
-      err.text = `The flags you provided for ${extra} are not valid. If you don't know what flags can be used, type HELP ${extra}.`;
-    } else if (type === "bp") {
-      err.text = `The ${extra.cmd} command requires ${extra.noAccepted} parameter(s). If you don't know what parameter(s) to use, type HELP ${extra.cmd}.`;
-    } else if (type === "up") {
-      err.text = `The command ${extra} is not supported by the HELP utility.`;
-    }
+    return {
+      text: errorMessages[type] || "An unknown error occurred.",
+      isError: true,
+      hasBuffer: true,
+    };
+  };
 
-    return err;
-  }
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     if (document.activeElement instanceof HTMLInputElement) return; // Không xử lý nếu đang nhập trong input
+  //     handleTyping(e as unknown as React.KeyboardEvent<HTMLInputElement>); // Chuyển kiểu dữ liệu
+  //   };
 
-  render() {
-    const { theme } = this.props;
-    const { fieldHistory, userInput } = this.state;
+  //   window.addEventListener("keydown", handleKeyDown);
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, [handleTyping]);
 
-    return (
-      <div
-        id="field"
-        className={theme.app.backgroundColor === "#333444" ? "dark" : "light"}
-        style={theme.field}
-        onKeyDown={(e) => this.handleTyping(e as unknown as KeyboardEvent)}
-        tabIndex={0}
-        onContextMenu={(e) => this.handleContextMenuPaste(e)}
-      >
-        {fieldHistory.map(({ text, isCommand, isError, hasBuffer }, index) => {
-          if (Array.isArray(text)) {
-            return <MultiText key={index} input={text} isError={isError} hasBuffer={hasBuffer} />;
-          }
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => handleTyping(e);
+  //   window.addEventListener("keydown", handleKeyDown);
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, [userInput, commandHistory, commandHistoryIndex]);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-          return <Text key={index} input={text} isCommand={isCommand} isError={isError} hasBuffer={hasBuffer} />;
-        })}
-        <UserText input={userInput} theme={theme.cursor} />
-      </div>
-    );
-  }
-}
+  useEffect(() => {
+    inputRef.current?.focus(); // Focus vào input khi component render
+  }, []);
 
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => handleTyping(e);
+
+  //   window.addEventListener("keydown", handleKeyDown);
+
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, [userInput, commandHistory, commandHistoryIndex]);
+
+  return (
+    <div
+      id="field"
+      onKeyDown={handleTyping}
+      tabIndex={0}
+      onContextMenu={(e) => handleContextMenuPaste(e)}
+      className="code-font"
+    >
+      {fieldHistory.map(({ text, isCommand, isError, hasBuffer }, index) => {
+        if (Array.isArray(text)) {
+          return (
+            <MultiText
+              key={index}
+              input={text}
+              isError={isError}
+              hasBuffer={hasBuffer}
+            />
+          );
+        }
+
+        return (
+          <Text
+            key={index}
+            input={text}
+            isCommand={isCommand}
+            isError={isError}
+            hasBuffer={hasBuffer}
+          />
+        );
+      })}
+      <UserText input={userInput} />
+
+      <input
+        ref={inputRef}
+        type="text"
+        value={userInput}
+        onChange={(e) => setUserInput(e.target.value)}
+        onKeyDown={handleTyping}
+        style={{
+          position: "absolute",
+          opacity: 0, // Ẩn input nhưng vẫn nhận sự kiện nhập
+          left: "-9999px",
+        }}
+      />
+    </div>
+  );
+};
 export default Field;
 
-const MultiText = ({ input, isError, hasBuffer }: { input: string[]; isError?: boolean; hasBuffer?: boolean }) => (
-  <div className={`multi-text ${isError ? "error" : ""} ${hasBuffer ? "buffer" : ""}`}>
+const MultiText = ({
+  input,
+  isError,
+  hasBuffer,
+}: {
+  input: string[];
+  isError?: boolean;
+  hasBuffer?: boolean;
+}) => (
+  <div
+    className={`multi-text ${isError ? "error" : ""} ${
+      hasBuffer ? "buffer" : ""
+    }`}
+  >
     {input.map((line, index) => (
       <p key={index}>{line}</p>
     ))}
   </div>
 );
 
-const Text = ({ input, isCommand, isError, hasBuffer }: { input?: string; isCommand?: boolean; isError?: boolean; hasBuffer?: boolean }) => (
-  <p className={`text ${isCommand ? "command" : ""} ${isError ? "error" : ""} ${hasBuffer ? "buffer" : ""}`}>
-    {input} 
+const Text = ({
+  input,
+  isCommand,
+  isError,
+  hasBuffer,
+}: {
+  input?: string;
+  isCommand?: boolean;
+  isError?: boolean;
+  hasBuffer?: boolean;
+}) => (
+  <p
+    className={`text ${isCommand ? "command" : ""} ${isError ? "error" : ""} ${
+      hasBuffer ? "buffer" : ""
+    }`}
+  >
+    {input}
   </p>
 );
 
-const UserText = ({ input, theme }: { input: string; theme: React.CSSProperties }) => (
-  <p className="user-text" style={theme}>
+const UserText = ({ input }: { input: string }) => (
+  <p className="user-text">
     <span>RT C:\Users\Guest&gt; </span>
     {input}
   </p>

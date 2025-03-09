@@ -13,6 +13,9 @@ const navItems = {
   '/view': {
     name: 'view terminal',
   },
+  '/view2': {
+    name: 'view terminal2',
+  },
 
 }
 export function Navbar() {

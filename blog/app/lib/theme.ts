@@ -31,7 +31,7 @@ export type ThemeStyles = {
   // Khai báo themes với type
   export const themes: Themes = {
     dark: {
-      app: { backgroundColor: '#333444' },
+      app: { backgroundColor: '#4F959D' },
       terminal: { boxShadow: '0 2px 5px #111' },
       window: { backgroundColor: '#222345', color: '#F4F4F4', userSelect: 'none' },
       field: { backgroundColor: '#222333', color: '#F4F4F4', fontWeight: 'normal' },
